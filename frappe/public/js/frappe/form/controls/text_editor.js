@@ -268,7 +268,8 @@ frappe.ui.form.ControlTextEditor = class ControlTextEditor extends frappe.ui.for
 			}, 300),
 			renderItem(item) {
 				let value = item.value;
-				return `${value} ${item.is_group ? frappe.utils.icon("users") : ""}`;
+				let email = item?.email ? `(${item?.email})` : "";
+				return `${value} ${email} ${item.is_group ? frappe.utils.icon("users") : ""}`;
 			},
 		};
 	}
@@ -389,7 +390,7 @@ frappe.ui.form.ControlTextEditor = class ControlTextEditor extends frappe.ui.for
 	}
 
 	get_keyboard_bindings() {
-		let bindings = {
+		const bindings = {
 			"table enter": {
 				key: "Enter",
 				formats: ["table"],
@@ -416,6 +417,14 @@ frappe.ui.form.ControlTextEditor = class ControlTextEditor extends frappe.ui.for
 				},
 			},
 		};
+
+		if (this.grid_row) {
+			bindings["tab"] = {
+				key: "Tab",
+				handler: () => true, // call default handler
+			};
+		}
+
 		return bindings;
 	}
 };

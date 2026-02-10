@@ -77,7 +77,7 @@ display_fieldtypes = (
 
 numeric_fieldtypes = ("Currency", "Int", "Long Int", "Float", "Percent", "Check")
 
-data_field_options = ("Email", "Name", "Phone", "URL", "Barcode")
+data_field_options = ("Email", "Name", "Phone", "URL", "Barcode", "IBAN")
 
 default_fields = (
 	"doctype",
@@ -242,7 +242,7 @@ def get_permitted_fields(
 	)
 
 	if permission_type == "select":
-		return permitted_fields
+		return [*meta.default_fields, *permitted_fields]
 
 	valid_columns = set(valid_columns)
 	result = [

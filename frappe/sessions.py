@@ -8,7 +8,7 @@ permission, homepage, default variables, system defaults etc
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from urllib.parse import unquote
 
 import redis
@@ -181,6 +181,7 @@ def get():
 	bootinfo["user"]["impersonated_by"] = frappe.session.data.get("impersonated_by")
 	bootinfo["navbar_settings"] = frappe.client_cache.get_doc("Navbar Settings")
 	bootinfo.has_app_updates = has_app_update_notifications()
+	bootinfo.show_external_link_warning = frappe.get_system_settings("show_external_link_warning")
 
 	return bootinfo
 
@@ -255,6 +256,9 @@ class Session:
 		self.sid = self.data.sid = sid
 		self.data.data.user = self.user
 		self.data.data.session_ip = frappe.local.request_ip
+
+		if frappe.request:
+			self.data.data.user_agent = frappe.request.headers.get("User-Agent")
 
 		if session_end:
 			self.data.data.session_end = session_end
@@ -366,7 +370,7 @@ class Session:
 
 			if self.time_diff > expiry or (
 				(session_end := session_data.get("session_end"))
-				and datetime.now(tz=timezone.utc) > datetime.fromisoformat(session_end)
+				and datetime.now(tz=UTC) > datetime.fromisoformat(session_end)
 			):
 				self._delete_session()
 				data = None
@@ -412,13 +416,16 @@ class Session:
 		last_updated = self.data.data.last_updated
 		time_diff = frappe.utils.time_diff_in_seconds(now, last_updated) if last_updated else None
 
+		threshold = min(get_expiry_in_seconds() / 2, 600) or 600
+
 		# database persistence is secondary, don't update it too often
 		updated_in_db = False
 		if (
-			force or (time_diff is None) or (time_diff > 600) or self._update_in_cache
+			force or (time_diff is None) or (time_diff > threshold) or self._update_in_cache
 		) and not frappe.flags.read_only:
 			self.data.data.last_updated = now
 			self.data.data.lang = str(frappe.lang)
+			self.data.data.session_ip = frappe.local.request_ip
 
 			Sessions = frappe.qb.DocType("Sessions")
 			# update sessions table

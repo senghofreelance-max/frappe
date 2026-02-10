@@ -1,4 +1,11 @@
-frappe.ui.get_print_settings = function (pdf, callback, letter_head, pick_columns) {
+frappe.ui.get_print_settings = function (
+	pdf,
+	callback,
+	letter_head,
+	pick_columns,
+	has_filters = false,
+	title = null
+) {
 	var print_settings = locals[":Print Settings"]["Print Settings"];
 
 	var company = frappe.defaults.get_default("company");
@@ -21,13 +28,14 @@ frappe.ui.get_print_settings = function (pdf, callback, letter_head, pick_column
 		},
 		{
 			fieldtype: "Link",
-			fieldname: "report",
-			label: __("Report"),
+			fieldname: "print_format",
+			label: __("Print Format"),
 			options: "Print Format",
-			default: letter_head || default_letter_head,
 			get_query: () => ({
 				filters: {
 					print_format_for: "Report",
+					print_format_type: "JS",
+					report: frappe.query_report ? frappe.query_report.report_name : "",
 					disabled: 0,
 				},
 			}),
@@ -47,12 +55,21 @@ frappe.ui.get_print_settings = function (pdf, callback, letter_head, pick_column
 		},
 	];
 
+	if (has_filters) {
+		columns.push({
+			label: __("Include filters"),
+			fieldtype: "Check",
+			fieldname: "include_filters",
+		});
+	}
+
 	if (pick_columns) {
 		columns.push(
 			{
 				label: __("Pick Columns"),
 				fieldtype: "Check",
 				fieldname: "pick_columns",
+				depends_on: "eval: !doc.print_format",
 			},
 			{
 				label: __("Select Columns"),
@@ -71,17 +88,35 @@ frappe.ui.get_print_settings = function (pdf, callback, letter_head, pick_column
 
 	return frappe.prompt(
 		columns,
-		function (data) {
-			data = $.extend(print_settings, data);
-			if (!data.with_letter_head) {
-				data.letter_head = null;
+		function (settings) {
+			settings = $.extend(print_settings, settings);
+
+			if (!settings.with_letter_head) {
+				settings.letter_head = null;
+				settings.letter_head_name = null;
+			} else {
+				const letter_head_name =
+					settings.letter_head ||
+					settings.letter_head_name ||
+					print_settings.letter_head;
+				if (letter_head_name) {
+					settings.letter_head_name = letter_head_name;
+					settings.letter_head = frappe.boot.letter_heads[letter_head_name];
+				}
 			}
-			if (data.letter_head) {
-				data.letter_head = frappe.boot.letter_heads[print_settings.letter_head];
+
+			if (settings.print_format) {
+				settings.pick_columns = 0;
+				settings.columns = null;
 			}
-			callback(data);
+
+			callback(settings);
+			// clean up print format to avoid affecting next print
+			if (settings.print_format) {
+				settings.print_format = null;
+			}
 		},
-		__("Print Settings")
+		title ? __(title) : __("Print Settings")
 	);
 };
 
@@ -216,7 +251,7 @@ frappe.ui.form.qz_fail = function (e) {
 	// notify qz errors
 	frappe.show_alert(
 		{
-			message: __("QZ Tray Failed: ") + e.toString(),
+			message: __("QZ Tray Failed:") + " " + e.toString(),
 			indicator: "red",
 		},
 		20

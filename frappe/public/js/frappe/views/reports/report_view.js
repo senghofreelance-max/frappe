@@ -17,7 +17,9 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 
 	setup_defaults() {
 		super.setup_defaults();
-		this.page_title = __("Report:") + " " + this.page_title;
+		if (!frappe.is_mobile()) {
+			this.page_title = __("Report:") + " " + this.page_title;
+		}
 		this.view = "Report";
 
 		this.link_title_doctype_fields = [];
@@ -75,12 +77,6 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 	setup_page() {
 		this.menu_items = this.report_menu_items();
 		super.setup_page();
-	}
-
-	toggle_side_bar() {
-		super.toggle_side_bar();
-		// refresh datatable when sidebar is toggled to accomodate extra space
-		this.render(true);
 	}
 
 	setup_result_area() {
@@ -1027,7 +1023,7 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 			columns: 2,
 			options: columns[this.doctype]
 				.filter((df) => {
-					return !df.hidden && df.fieldname !== "name";
+					return !df.hidden && df.fieldname !== "name" && !df.is_virtual;
 				})
 				.map((df) => ({
 					label: __(df.label, null, df.parent),
@@ -1304,7 +1300,11 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 					this.remove_column_from_datatable(col);
 				}
 			} else if (col.field in d) {
-				const value = d[col.field];
+				let rendered_value = d[col.field];
+				if (col.docfield.fieldtype == "Data") {
+					rendered_value = frappe.utils.escape_html(rendered_value);
+				}
+				const value = rendered_value;
 				return {
 					name: d.name,
 					doctype: col.docfield.parent,
@@ -1537,6 +1537,7 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 			},
 			{
 				label: __("Print"),
+				condition: () => frappe.model.can_print(this.doctype),
 				action: () => {
 					// prepare rows in their current state, sorted and filtered
 					const rows_in_order = this.datatable.datamanager.rowViewOrder
@@ -1573,11 +1574,6 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 				action: () => this.toggle_charts(),
 			},
 			{
-				label: __("Toggle Sidebar"),
-				action: () => this.toggle_side_bar(),
-				shortcut: "Ctrl+K",
-			},
-			{
 				label: __("Pick Columns"),
 				action: () => {
 					const d = new frappe.ui.Dialog({
@@ -1585,7 +1581,10 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 						fields: this.get_dialog_fields(),
 						primary_action: (values) => {
 							// doctype fields
-							let fields = values[this.doctype].map((f) => [f, this.doctype]);
+							let fields = (values[this.doctype] || []).map((f) => [
+								f,
+								this.doctype,
+							]);
 							delete values[this.doctype];
 
 							// child table fields
@@ -1609,6 +1608,18 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 							d.hide();
 						},
 					});
+
+					const $bulk = $(`
+						<div class="mb-3">
+							<button class="btn btn-default btn-xs" data-action="select_all">${__("Select All")}</button>
+							<button class="btn btn-default btn-xs" data-action="unselect_all">${__("Unselect All")}</button>
+						</div>
+					`);
+					const toggleAll = (checked) =>
+						d.$wrapper.find(":checkbox").prop("checked", checked).trigger("change");
+					$bulk.on("click", "[data-action=select_all]", () => toggleAll(true));
+					$bulk.on("click", "[data-action=unselect_all]", () => toggleAll(false));
+					d.$body.prepend($bulk);
 
 					d.$body.prepend(`
 						<div class="columns-search">
@@ -1690,8 +1701,15 @@ frappe.views.ReportView = class ReportView extends frappe.views.ListView {
 								delete args.start;
 								delete args.page_length;
 							}
-
-							open_url_post(frappe.request.url, args);
+							args.export_in_background = data.export_in_background;
+							if (data.export_in_background) {
+								frappe.call({
+									method: args.cmd,
+									args,
+								});
+							} else {
+								open_url_post(frappe.request.url, args);
+							}
 
 							d.hide();
 						}
