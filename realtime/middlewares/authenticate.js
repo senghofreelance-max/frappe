@@ -54,6 +54,9 @@ function authenticate_with_frappe(socket, next) {
 		} else if (socket.sid) {
 			headers["Cookie"] = `sid=${socket.sid}`;
 		}
+		// get_url() now always targets 127.0.0.1, so tell Frappe which site
+		// to route the request to explicitly (frappe/app.py reads this header).
+		headers["X-Frappe-Site-Name"] = socket.site_name;
 		const secret = await getSecretFromRedis();
 		if (secret) {
 			headers["X-Frappe-Socket-Secret"] = secret;

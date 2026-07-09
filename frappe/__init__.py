@@ -343,7 +343,12 @@ def errprint(msg: str) -> None:
 	:param msg: Message."""
 	msg = as_unicode(msg)
 	if not request or ("cmd" not in local.form_dict) or conf.developer_mode:
-		print(msg)
+		try:
+			print(msg)
+		except OSError:
+			# stdout may be an unattached/broken pipe (e.g. dev console detached);
+			# don't let that crash the actual HTTP response.
+			pass
 
 	error_log.append({"exc": msg})
 
